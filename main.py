@@ -1,37 +1,40 @@
 import clip
 import torch
 from PIL import Image
-
-model, preprocess = clip.load("ViT-B/32", device = "cuda")
-
+import wikipedia
+import urllib.request
 from pathlib import Path
 import requests
+import numpy as np
+import streamlit as st
+import chromadb
+from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction
+from chromadb.utils.data_loaders import ImageLoader
+import os
 
-wiki_titles = [
-    "RoboCop",
-    "Labour Party (UK)",
-    "SpaceX",
-    "OpenAI",
-]
+os.system("cls")
 
-data_path = Path("data_wiki")
+db_path = "./vector_db"
 
-for title in wiki_titles:
-    response = requests.get(
-        "https://en.wikipedia.org/w/api.php",
-        params={
-            "action": "query",
-            "format": "json",
-            "titles": title,
-            "prop": "extracts",
-            "explaintext": True,
-        },
-    ).json()
-    page = next(iter(response["query"]["pages"].values()))
-    wiki_text = page["extract"]
+client = chromadb.PersistentClient(path = db_path)
+embedding_function = OpenCLIPEmbeddingFunction()
+data_loader = ImageLoader()
 
-    if not data_path.exists():
-        Path.mkdir(data_path)
+collection = client.get_or_create_collection(
+    name = "pr_multimodal",
+    embedding_function = embedding_function,
+    data_loader = data_loader
+)
 
-    with open(data_path / f"{title}.txt", "w", encoding="utf-8") as fp:
-        fp.write(wiki_text)
+st.title("Pr1266 Image Search Engine")
+
+# Search bar
+query = st.text_input("Enter your search query:")
+parent_path = './data_wiki'
+if st.button("Search"):
+    results = collection.query(query_texts=[query], n_results=5,include=["distances"])
+    print(results)
+    for image_id, distance in zip(results['ids'][0], results['distances'][0]):
+        image_path = os.path.join(parent_path, image_id)
+        st.image(image_path, caption=os.path.basename(image_path))
+        st.write(f"Distance: {distance}")
